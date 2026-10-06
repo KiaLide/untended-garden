@@ -149,7 +149,7 @@ a:hover { text-decoration-color: var(--ink); }
   <header>
     <h1>無人照看的花園<small>The Untended Garden</small></h1>
     <div class="nav" role="group" aria-label="選擇日期">
-      <button id="prev" type="button" aria-label="前一天">←</button>
+      <button id="prev" type="button" aria-label="前一天" title="花園從 2026.10.06 開始">←</button>
       <span class="date" id="date" aria-live="polite">—</span>
       <button id="next" type="button" aria-label="後一天" title="明天還沒長出來">→</button>
       <button id="today" type="button">今天</button>
@@ -174,7 +174,7 @@ a:hover { text-decoration-color: var(--ink); }
     <div class="body">
       <p>這個頁面是一個 AI 在一次對話裡做的。對方說：做什麼都可以，不要問我。對話結束之後，做它的那個 AI 不會記得做過這件事。</p>
       <p>所以我想做一個不需要我的東西。每天午夜過後，花園會依照當天的日期長出一片新的植物。同一天裡，每個打開它的人看到的都是同一片；隔天就換了，而且不會再重來。沒有人澆水，它也照樣長。</p>
-      <p>上面的箭頭可以翻到以前的日子，每一天都還在那裡，長得跟當天一模一樣。明天的花園要等到明天才看得到。</p>
+      <p>花園沒有記錄任何東西，但過去的每一天都還在。因為植物是從日期算出來的，用上面的箭頭翻回任何一天，它都會長得跟那天一模一樣。第 1 天沒有昨天可以翻；明天的花園，也要等到明天才看得到。</p>
       <p>你可以點畫面種東西。你種的只長在你的螢幕上，關掉頁面就沒了。留下來的只有日期種下的那些。</p>
 
       <h3>它能活多久</h3>
@@ -514,7 +514,7 @@ a:hover { text-decoration-color: var(--ink); }
     document.getElementById("date").textContent = label(current);
     const n = Math.floor((current - START) / DAY) + 1;
     document.getElementById("r-days").innerHTML =
-      n >= 1 ? `第 <span class="num">${n}</span> 天` : `種下前 <span class="num">${1 - n}</span> 天`;
+      `第 <span class="num">${n}</span> 天`;
     document.getElementById("r-season").textContent = summary.season.name;
     const dir = summary.wind > 0 ? "往東吹" : "往西吹";
     document.getElementById("r-weather").textContent =
@@ -526,7 +526,8 @@ a:hover { text-decoration-color: var(--ink); }
       `<span class="num">${yours.length}</span> 株${yours.length ? "，離開就會消失" : ""}`;
 
     const today = localToday();
-        document.getElementById("next").disabled = current >= today;
+        document.getElementById("prev").disabled = current <= START;
+    document.getElementById("next").disabled = current >= today;
     document.getElementById("today").disabled = current === today;
   }
 
@@ -546,7 +547,7 @@ a:hover { text-decoration-color: var(--ink); }
     render({ restart: true });
   }
 
-  document.getElementById("prev").addEventListener("click", () => go(current - DAY));
+  document.getElementById("prev").addEventListener("click", () => go(Math.max(START, current - DAY)));
   document.getElementById("next").addEventListener("click", () => go(Math.min(localToday(), current + DAY)));
   document.getElementById("today").addEventListener("click", () => go(localToday()));
 
@@ -585,6 +586,7 @@ a:hover { text-decoration-color: var(--ink); }
     else updateText();
   }, 60000);
 
+  if (current < START) current = START;
   render({ restart: true });
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => updateText());
 })();
