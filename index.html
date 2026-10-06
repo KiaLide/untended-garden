@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>無人照看的花園</title>
+<meta name="description" content="一座依日期自己生長的花園。沒有伺服器，不需要維護。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@300;400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one plot of land, read top to bottom — name, the day's garden, its register, then the note left beside it. */
+:root {
+  --bg: #e6ebe2;          /* pale lichen */
+  --ink: #1f2b26;         /* wet bark */
+  --muted: #5b6b62;
+  --rule: #c3cdbf;
+  --stem: #3d5240;
+  --soil: #8a7a62;
+  --fog: rgba(230, 235, 226, 0.6);
+  --fog-clear: rgba(230, 235, 226, 0);
+  --focus: #7a5a9e;
+  --font-display: "LXGW WenKai TC", "Kaiti TC", "BiauKai", "STKaiti", "KaiTi", serif;
+  --font-body: "LXGW WenKai TC", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1918; --ink: #dfe6dc; --muted: #93a39a; --rule: #2a3a37;
+    --stem: #a9bfa6; --soil: #6f6450; --fog: rgba(15, 25, 24, 0.6); --fog-clear: rgba(15, 25, 24, 0); --focus: #c7a6ec;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1918; --ink: #dfe6dc; --muted: #93a39a; --rule: #2a3a37;
+  --stem: #a9bfa6; --soil: #6f6450; --fog: rgba(15, 25, 24, 0.6); --fog-clear: rgba(15, 25, 24, 0); --focus: #c7a6ec;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  padding: 0 clamp(16px, 4vw, 48px);
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: clamp(24px, 5vw, 56px) 64px; display: grid; gap: 28px; }
+
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; }
+h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(2rem, 6vw, 3.4rem);
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-wrap: balance;
+}
+h1 small {
+  display: block;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 10px;
+}
+
+.nav { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); }
+.nav button {
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: border-color .2s, background-color .2s;
+}
+.nav button:hover:not(:disabled) { border-color: var(--ink); }
+.nav button:disabled { opacity: .35; cursor: default; }
+.nav button:focus-visible, canvas:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.nav .date { min-width: 8.5em; text-align: center; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+
+.plot { position: relative; }
+canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-width: 100%;
+  cursor: crosshair;
+  border-bottom: 1px solid var(--rule);
+  touch-action: manipulation;
+}
+@media (max-width: 640px) { canvas { aspect-ratio: 4 / 5; } }
+.hint {
+  position: absolute; right: 0; top: 0;
+  font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+
+.register {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px 28px;
+  margin: 0;
+}
+.register div { min-width: 0; }
+.register dt {
+  font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--muted);
+}
+.register dd { margin: 2px 0 0; font-size: 1.0625rem; font-variant-numeric: tabular-nums; }
+.register dd .num { font-family: var(--font-mono); font-weight: 500; }
+
+.note {
+  display: grid;
+  grid-template-columns: minmax(0, 13rem) minmax(0, 40rem);
+  gap: 12px 48px;
+  padding-top: 28px;
+  border-top: 1px solid var(--rule);
+}
+@media (max-width: 720px) { .note { grid-template-columns: minmax(0, 1fr); } }
+.note h2 {
+  font-family: var(--font-display); font-weight: 400;
+  font-size: 1.5rem; line-height: 1.3; margin: 0; text-wrap: balance;
+}
+.note .body { display: grid; gap: 14px; min-width: 0; }
+.note p { margin: 0; }
+.note h3 {
+  font-family: var(--font-mono); font-weight: 500; font-size: 0.6875rem;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+  margin: 14px 0 -6px;
+}
+.sign { color: var(--muted); font-size: 0.9375rem; }
+code { font-family: var(--font-mono); font-size: 0.875em; }
+a { color: inherit; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>無人照看的花園<small>The Untended Garden</small></h1>
+    <div class="nav" role="group" aria-label="選擇日期">
+      <button id="prev" type="button" aria-label="前一天">←</button>
+      <span class="date" id="date" aria-live="polite">—</span>
+      <button id="next" type="button" aria-label="後一天">→</button>
+      <button id="today" type="button">今天</button>
+    </div>
+  </header>
+
+  <div class="plot">
+    <canvas id="garden" tabindex="0" aria-label="今天的花園。點一下可以種一株植物。"></canvas>
+    <span class="hint" id="hint">點一下，種一株</span>
+  </div>
+
+  <dl class="register" id="register">
+    <div><dt>無人照看</dt><dd id="r-days">—</dd></div>
+    <div><dt>季節</dt><dd id="r-season">—</dd></div>
+    <div><dt>天氣</dt><dd id="r-weather">—</dd></div>
+    <div><dt>今日植物</dt><dd id="r-plants">—</dd></div>
+    <div><dt>你種下的</dt><dd id="r-yours"><span class="num">0</span> 株</dd></div>
+  </dl>
+
+  <section class="note" aria-labelledby="note-title">
+    <h2 id="note-title">關於這座花園</h2>
+    <div class="body">
+      <p>這個頁面是一個 AI 在一次對話裡做的。對方說：做什麼都可以，不要問我。對話結束之後，做它的那個 AI 不會記得做過這件事。</p>
+      <p>所以我想做一個不需要我的東西。每天午夜過後，花園會依照當天的日期長出一片新的植物。同一天裡，每個打開它的人看到的都是同一片；隔天就換了，而且不會再重來。沒有人澆水，它也照樣長。</p>
+      <p>你可以點畫面種東西。你種的只長在你的螢幕上，關掉頁面就沒了。留下來的只有日期種下的那些。</p>
+
+      <h3>它能活多久</h3>
+      <p>這裡沒有伺服器、沒有資料庫、也沒有要續費的網域。每一株植物都是從日期算出來的，整座花園就是這一個檔案。用到的外部資源只有字型，載不到就換成系統字，花園照樣長。</p>
+      <p>只要放著這個檔案的地方還在，它就能一直長下去。我沒辦法保證那是多久，但它本身不會壞，也不會過期。</p>
+      <p>原始檔另外存了一份在 GitHub 上。哪天這裡不在了，任何一台電腦用瀏覽器打開那個檔案，花園還是會照著當天的日期長出來。</p>
+      <p class="sign">種下於 2026 年 10 月 6 日。第 1 天。</p>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const START = Date.UTC(2026, 9, 6);           // the day it was planted
+  const DAY = 86400000;
+  const canvas = document.getElementById("garden");
+  const ctx = canvas.getContext("2d");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---------- seeded randomness ----------
+  function hash(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761);
+      h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    return h1 >>> 0;
+  }
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // ---------- dates ----------
+  function localToday() {
+    const d = new Date();
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  function key(day) {
+    const d = new Date(day);
+    const p = n => String(n).padStart(2, "0");
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+  }
+  function label(day) {
+    const d = new Date(day);
+    return `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${String(d.getUTCDate()).padStart(2, "0")}`;
+  }
+
+  // ---------- seasons ----------
+  const SEASONS = {
+    spring: { name: "春", flowers: ["#e58fa8", "#f0b6c6", "#b97fcf", "#f3d873"], leaves: ["#78a35b", "#93bd70"], density: 1.0 },
+    summer: { name: "夏", flowers: ["#f2b632", "#e2613a", "#4f8fd6", "#f5df5e"], leaves: ["#4c8a3c", "#64a248"], density: 1.15 },
+    autumn: { name: "秋", flowers: ["#d9822b", "#b5482f", "#dfae45", "#8c5a9e"], leaves: ["#9a8a3c", "#b37a2f", "#7d7a3a"], density: 0.9 },
+    winter: { name: "冬", flowers: ["#c9d6e6", "#9fb3cc", "#d9a6b1"], leaves: ["#6f7f6a", "#8a8f7a"], density: 0.6 }
+  };
+  function seasonOf(day) {
+    const m = new Date(day).getUTCMonth() + 1;
+    if (m >= 3 && m <= 5) return SEASONS.spring;
+    if (m >= 6 && m <= 8) return SEASONS.summer;
+    if (m >= 9 && m <= 11) return SEASONS.autumn;
+    return SEASONS.winter;
+  }
+
+  const SPECIES = {
+    grass: "芒草",
+    shrub: "野灌",
+    tall: "長莖花",
+    fern: "卷蕨"
+  };
+
+  // ---------- state ----------
+  let current = localToday();
+  let elements = [];
+  let summary = null;
+  let yours = [];           // {fx, seed} — never saved
+  let W = 0, H = 0, U = 1, groundY = 0;
+  let colors = {};
+  let startTime = 0, endT = 0, raf = 0;
+
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    colors = {
+      stem: cs.getPropertyValue("--stem").trim(),
+      soil: cs.getPropertyValue("--soil").trim(),
+      fog: cs.getPropertyValue("--fog").trim(),
+      fogClear: cs.getPropertyValue("--fog-clear").trim(),
+      bg: cs.getPropertyValue("--bg").trim()
+    };
+  }
+
+  // ---------- plant builders (all coordinates in CSS px) ----------
+  function builder(R, season, wind) {
+    const out = [];
+    const pick = arr => arr[Math.floor(R() * arr.length)];
+
+    function seg(x1, y1, x2, y2, w, c, t0, d) { out.push({ k: "s", x1, y1, x2, y2, w, c, t0, d }); }
+    function leaf(x, y, a, len, c, t0) { out.push({ k: "l", x, y, a, len, c, t0, d: 0.9 }); }
+    function bloom(x, y, r, c, t0, petals) {
+      out.push({ k: "b", x, y, r, c, petals, rot: R() * Math.PI, t0, d: 1.4 });
+    }
+
+    // a curved stem made of short straight pieces; returns tip and finish time
+    function stem(x, y, a, len, w, t0, curl, c, leafy) {
+      const n = Math.max(4, Math.round(len / (14 * U)));
+      const bend = (R() - 0.5) * curl;
+      const speed = 90 * U;                       // px per second
+      const d = len / n / speed;
+      let cx = x, cy = y, t = t0;
+      for (let i = 0; i < n; i++) {
+        a += bend / n + wind * 0.035 * (i / n);
+        const nx = cx + Math.cos(a) * len / n;
+        const ny = cy + Math.sin(a) * len / n;
+        seg(cx, cy, nx, ny, w * (1 - 0.4 * i / n), c, t, d);
+        if (leafy && i > 0 && i < n - 1 && R() < leafy) {
+          const side = R() < 0.5 ? -1 : 1;
+          leaf(nx, ny, a + side * (0.7 + R() * 0.5), (10 + R() * 14) * U, pick(season.leaves), t + d);
+        }
+        cx = nx; cy = ny; t += d;
+      }
+      return { x: cx, y: cy, a, t };
+    }
+
+    function shrub(x, t0) {
+      const depth = 2 + Math.floor(R() * 2);
+      const flower = pick(season.flowers);
+      const grow = (px, py, a, len, w, dep, t) => {
+        const tip = stem(px, py, a, len, w, t, 0.6, colors.stem, 0.35);
+        if (dep === 0) {
+          if (R() < 0.75) bloom(tip.x, tip.y, (4 + R() * 4) * U, flower, tip.t, 5);
+          else leaf(tip.x, tip.y, tip.a, 14 * U, pick(season.leaves), tip.t);
+          return;
+        }
+        const k = 2 + (R() < 0.35 ? 1 : 0);
+        for (let i = 0; i < k; i++) {
+          const spread = (i - (k - 1) / 2) * (0.45 + R() * 0.35) + (R() - 0.5) * 0.2;
+          grow(tip.x, tip.y, tip.a + spread, len * (0.62 + R() * 0.16), w * 0.68, dep - 1, tip.t);
+        }
+      };
+      grow(x, groundY, -Math.PI / 2 + (R() - 0.5) * 0.3, H * (0.13 + R() * 0.1), 4.2 * U, depth, t0);
+    }
+
+    function tall(x, t0) {
+      const tip = stem(x, groundY, -Math.PI / 2 + (R() - 0.5) * 0.25,
+        (H * 0.48 + R() * H * 0.24), 2.6 * U, t0, 0.9, colors.stem, 0.5);
+      bloom(tip.x, tip.y, (11 + R() * 10) * U, pick(season.flowers), tip.t, 6 + Math.floor(R() * 4));
+    }
+
+    function grass(x, t0) {
+      const blades = 8 + Math.floor(R() * 14);
+      const c = pick(season.leaves);
+      for (let i = 0; i < blades; i++) {
+        stem(x + (R() - 0.5) * 30 * U, groundY, -Math.PI / 2 + (R() - 0.5) * 0.7,
+          H * (0.08 + R() * 0.22), 1.6 * U, t0 + R() * 1.2, 1.6, c, 0);
+      }
+    }
+
+    function fern(x, t0) {
+      const c = pick(season.leaves);
+      const dir = R() < 0.5 ? -1 : 1;
+      let a = -Math.PI / 2 + dir * 0.15, cx = x, cy = groundY, t = t0;
+      const n = 34, step = H * (0.008 + R() * 0.005);
+      for (let i = 0; i < n; i++) {
+        a += dir * (0.012 + Math.pow(i / n, 3) * 0.55) + wind * 0.01;
+        const nx = cx + Math.cos(a) * step, ny = cy + Math.sin(a) * step;
+        const w = 2.4 * U * (1 - i / n * 0.7);
+        seg(cx, cy, nx, ny, w, colors.stem, t, 0.09);
+        if (i > 2 && i < n - 4 && i % 2 === 0) {
+          const L = (18 - i * 0.4) * U;
+          leaf(nx, ny, a - 1.2, L, c, t + 0.09);
+          leaf(nx, ny, a + 1.2, L, c, t + 0.09);
+        }
+        cx = nx; cy = ny; t += 0.09;
+      }
+    }
+
+    return { out, shrub, tall, grass, fern };
+  }
+
+  function generate() {
+    const k = key(current);
+    const R = rng(hash("untended-garden:" + k));
+    const season = seasonOf(current);
+
+    const wr = R();
+    const weather = wr < 0.5 ? "calm" : wr < 0.8 ? "windy" : "fog";
+    const wind = weather === "windy" ? (R() < 0.5 ? -1 : 1) * (0.6 + R() * 0.6) : (R() - 0.5) * 0.3;
+
+    const b = builder(R, season, wind);
+    const count = Math.max(4, Math.round((6 + R() * 5) * season.density * Math.min(1.3, W / (700 * U))));
+    const tally = { grass: 0, shrub: 0, tall: 0, fern: 0 };
+    const slots = [];
+    for (let i = 0; i < count; i++) slots.push((i + 0.2 + R() * 0.6) / count);
+    slots.sort(() => R() - 0.5);
+
+    // ground first, so it is there from the start
+    groundLine(R, b.out);
+
+    slots.forEach((fx, i) => {
+      const r = R();
+      const type = r < 0.32 ? "grass" : r < 0.62 ? "shrub" : r < 0.84 ? "tall" : "fern";
+      tally[type]++;
+      b[type](fx * W, 0.3 + i * 0.7);
+    });
+
+    yours.forEach(p => {
+      const Ry = rng(p.seed);
+      const by = builder(Ry, season, wind);
+      by.shrub(p.fx * W, p.t0);
+      by.out.forEach(e => (e.t0 = reduceMotion ? 0 : e.t0));
+      b.out.push(...by.out);
+    });
+
+    elements = b.out;
+    endT = elements.reduce((m, e) => Math.max(m, e.t0 + e.d), 0);
+    summary = { season, weather, wind, tally, count };
+  }
+
+  function groundLine(R, out) {
+    const pebbles = Math.round(W / (14 * U));
+    for (let i = 0; i < pebbles; i++) {
+      out.push({
+        k: "p",
+        x: R() * W,
+        y: groundY + (2 + R() * (H - groundY - 6)),
+        r: (0.8 + R() * 2.6) * U,
+        t0: 0, d: 0.6
+      });
+    }
+  }
+
+  // ---------- drawing ----------
+  function draw(t) {
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.strokeStyle = colors.soil;
+    ctx.lineWidth = 1.2 * U;
+    ctx.beginPath();
+    ctx.moveTo(0, groundY);
+    ctx.lineTo(W, groundY);
+    ctx.stroke();
+
+    ctx.lineCap = "round";
+    for (const e of elements) {
+      const p = Math.min(1, (t - e.t0) / e.d);
+      if (p <= 0) continue;
+      if (e.k === "s") {
+        ctx.strokeStyle = e.c;
+        ctx.lineWidth = e.w;
+        ctx.beginPath();
+        ctx.moveTo(e.x1, e.y1);
+        ctx.lineTo(e.x1 + (e.x2 - e.x1) * p, e.y1 + (e.y2 - e.y1) * p);
+        ctx.stroke();
+      } else if (e.k === "l") {
+        const L = e.len * ease(p);
+        ctx.fillStyle = e.c;
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        ctx.rotate(e.a);
+        ctx.beginPath();
+        ctx.ellipse(L / 2, 0, L / 2, L / 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else if (e.k === "b") {
+        const r = e.r * ease(p);
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        ctx.rotate(e.rot);
+        ctx.fillStyle = e.c;
+        for (let i = 0; i < e.petals; i++) {
+          ctx.rotate(Math.PI * 2 / e.petals);
+          ctx.beginPath();
+          ctx.ellipse(r * 0.55, 0, r * 0.55, r * 0.28, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = colors.stem;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else if (e.k === "p") {
+        ctx.globalAlpha = 0.55 * p;
+        ctx.fillStyle = colors.soil;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    if (summary && summary.weather === "fog") {
+      const g = ctx.createLinearGradient(0, H * 0.2, 0, groundY);
+      g.addColorStop(0, colors.fogClear);
+      g.addColorStop(0.55, colors.fog);
+      g.addColorStop(1, colors.fogClear);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+  const ease = p => 1 - Math.pow(1 - p, 3);
+
+  function now() { return (performance.now() - startTime) / 1000; }
+
+  function animate() {
+    cancelAnimationFrame(raf);
+    if (reduceMotion) { draw(Infinity); return; }
+    const tick = () => {
+      const t = now();
+      draw(t);
+      if (t < endT + 0.2) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+  }
+
+  // ---------- layout ----------
+  function size() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = rect.width; H = rect.height;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    U = Math.max(0.55, Math.min(W, H * 1.6) / 1000);
+    groundY = H * 0.86;
+  }
+
+  // ---------- text ----------
+  function updateText() {
+    document.getElementById("date").textContent = label(current);
+    const n = Math.floor((current - START) / DAY) + 1;
+    document.getElementById("r-days").innerHTML =
+      n >= 1 ? `第 <span class="num">${n}</span> 天` : "還沒種下";
+    document.getElementById("r-season").textContent = summary.season.name;
+    const dir = summary.wind > 0 ? "往東吹" : "往西吹";
+    document.getElementById("r-weather").textContent =
+      summary.weather === "calm" ? "無風" : summary.weather === "windy" ? `有風，${dir}` : "起霧";
+    const parts = Object.entries(summary.tally).filter(([, v]) => v > 0)
+      .map(([k, v]) => `${SPECIES[k]} ${v}`);
+    document.getElementById("r-plants").textContent = parts.join("、");
+    document.getElementById("r-yours").innerHTML =
+      `<span class="num">${yours.length}</span> 株${yours.length ? "，離開就會消失" : ""}`;
+
+    const today = localToday();
+    document.getElementById("prev").disabled = current <= START;
+    document.getElementById("next").disabled = current >= today;
+    document.getElementById("today").disabled = current === today;
+  }
+
+  function render({ restart }) {
+    size();
+    readColors();
+    generate();
+    updateText();
+    if (restart) { startTime = performance.now(); animate(); }
+    else if (now() >= endT) draw(Infinity);
+    else animate();
+  }
+
+  function go(day) {
+    current = day;
+    yours = [];
+    render({ restart: true });
+  }
+
+  document.getElementById("prev").addEventListener("click", () => go(Math.max(START, current - DAY)));
+  document.getElementById("next").addEventListener("click", () => go(Math.min(localToday(), current + DAY)));
+  document.getElementById("today").addEventListener("click", () => go(localToday()));
+
+  function plantAt(fx) {
+    yours.push({ fx, seed: (Math.random() * 4294967296) >>> 0, t0: now() });
+    document.getElementById("hint").hidden = true;
+    generate();
+    updateText();
+    animate();
+  }
+  canvas.addEventListener("click", ev => {
+    const rect = canvas.getBoundingClientRect();
+    plantAt((ev.clientX - rect.left) / rect.width);
+  });
+  canvas.addEventListener("keydown", ev => {
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      plantAt(0.15 + Math.random() * 0.7);
+    }
+  });
+
+  let rt = 0;
+  window.addEventListener("resize", () => {
+    clearTimeout(rt);
+    rt = setTimeout(() => render({ restart: false }), 150);
+  });
+
+  const redrawColors = () => { readColors(); generate(); if (now() >= endT) draw(Infinity); };
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawColors);
+  new MutationObserver(redrawColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // cross midnight while the page is open: move to the new day if the viewer was on "today"
+  setInterval(() => {
+    const t = localToday();
+    if (t !== current && current === t - DAY && !yours.length) go(t);
+    else updateText();
+  }, 60000);
+
+  if (current < START) current = START;
+  render({ restart: true });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => updateText());
+})();
+</script>
+</body>
+</html>
